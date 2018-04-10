@@ -34,6 +34,7 @@ library
     , vector
   exposed-modules:
       Text.Utf8Validator
+      Text.Utf8Validator2
   other-modules:
       Paths_utf8_validator
   default-language: Haskell2010
