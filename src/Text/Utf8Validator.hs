@@ -18,67 +18,110 @@ import qualified Data.ByteString as BS
 import qualified Data.Vector.Unboxed as V
 import           Data.Word
 
-charClasses :: V.Vector Int
-charClasses = V.generate 0x100 chrclass
-  where
-    chrclass i
-      | i <= 0x7f = 0
-      | i <= 0x8f = 1
-      | i <= 0x9f = 9
-      | i <= 0xbf = 7
-      | i <= 0xc1 = 8
-      | i <= 0xdf = 2
-      | i <= 0xe0 = 10
-      | i <= 0xec = 3
-      | i <= 0xed = 4
-      | i <= 0xef = 3
-      | i <= 0xf0 = 11
-      | i <= 0xf3 = 6
-      | i <= 0xf4 = 5
-      | otherwise = 8
+data CharClass
+  = C0
+  | C1
+  | C2
+  | C3
+  | C4
+  | C5
+  | C6
+  | C7
+  | C8
+  | C9
+  | C10
+  | C11
+  deriving (Eq, Ord, Enum, Bounded, Show)
 
-transitions :: V.Vector Int
-transitions = V.fromList
-  [ 0, 1, 2, 3, 5, 8, 7, 1, 1, 1, 4, 6, 1, 1, 1, 1
-  , 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
-  , 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1
-  , 1, 2, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 1, 1, 1
-  , 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1
-  , 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1
-  , 1, 1, 1, 1, 1, 1, 1, 3, 1, 3, 1, 1, 1, 1, 1, 1
-  , 1, 3, 1, 1, 1, 1, 1, 3, 1, 3, 1, 1, 1, 1, 1, 1
-  , 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
-  ]
+data S
+  = S0
+  | S1
+  | S2
+  | S3
+  | S4
+  | S5
+  | S6
+  | S7
+  | S8
+  deriving (Eq, Ord, Enum, Bounded, Show)
+
+charClass :: Word8 -> CharClass
+charClass i
+  | i <= 0x7f = C0
+  | i <= 0x8f = C1
+  | i <= 0x9f = C9
+  | i <= 0xbf = C7
+  | i <= 0xc1 = C8
+  | i <= 0xdf = C2
+  | i <= 0xe0 = C10
+  | i <= 0xec = C3
+  | i <= 0xed = C4
+  | i <= 0xef = C3
+  | i <= 0xf0 = C11
+  | i <= 0xf3 = C6
+  | i <= 0xf4 = C5
+  | otherwise = C8
+
+ccMask :: CharClass -> Int
+ccMask c = shift 0xff (-(fromEnum c))
+
+transitions :: CharClass -> S -> S
+transitions cc st =
+  case (st, cc) of
+    (S0, C0) -> S0
+    (S0, C2) -> S2
+    (S0, C3) -> S3
+    (S0, C4) -> S5
+    (S0, C5) -> S8
+    (S0, C6) -> S7
+    (S0, C10) -> S4
+    (S0, C11) -> S6
+    (S2, C1) -> S0
+    (S2, C7) -> S0
+    (S2, C9) -> S0
+    (S3, C1) -> S2
+    (S3, C7) -> S2
+    (S3, C9) -> S2
+    (S4, C7) -> S2
+    (S5, C1) -> S2
+    (S5, C9) -> S2
+    (S6, C7) -> S3
+    (S6, C9) -> S3
+    (S7, C1) -> S3
+    (S7, C7) -> S3
+    (S7, C9) -> S3
+    (S8, C1) -> S3
+    _ -> S1
 
 data State = State
   { codepoint :: !Int
-  , state :: !Int
+  , state :: !S
   } deriving (Eq, Ord, Show)
 
 initialState :: State
-initialState = State 0 0
+initialState = State 0 S0
 
 isAccepting :: State -> Bool
-isAccepting (State _ 0) = True
+isAccepting (State _ S0) = True
 isAccepting (State _ _) = False
 
 isRejected :: State -> Bool
-isRejected (State _ 1) = True
+isRejected (State _ S1) = True
 isRejected (State _ _) = False
 
 feed :: Word8 -> State -> State
 feed inp (State cp st) = State cp' st'
   where
-    typ = charClasses V.! fromIntegral inp
+    typ = charClass inp
     chr = fromIntegral inp
     cp' =
       case st of
-        0 -> shift 0xff (-typ) .&. chr
+        S0 -> ccMask typ .&. chr
         _ -> chr .&. 0x3f .|. shift cp 6
-    st' = transitions V.! ((st * 16) + typ)
+    st' = transitions typ st
 
 validateBS' :: BS.ByteString -> State -> State
 validateBS' bs st = BS.foldl' (flip feed) st bs
 
 validateBS :: BS.ByteString -> Bool
-validateBS bs = state (validateBS' bs initialState) == 0
+validateBS bs = isAccepting $ validateBS' bs initialState
