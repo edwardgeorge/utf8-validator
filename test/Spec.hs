@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 import Data.ByteString (ByteString, pack)
 import Data.Foldable
+import Data.String.UTF8 (fromString, toRep)
 import Data.Text ()
 import Data.Text.Encoding
+import Numeric
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -37,16 +39,39 @@ tests =
                "\xce\xba\xe1\xbd\xb9\xcf\x83\xce\xbc\xce\xb5\xf4\x90\x80\x80\x65\x64\x69\x74\x65\x64")
         ]
     , testGroup "test sequences" $ map gentest utf8TestSequences
+    , testGroup
+        "codepoints"
+        [ testCase "non-surrogates" $
+          traverse_
+            (valCodepoint True)
+            [x | x <- [0 .. 0x10ffff], x < 0xd800 && x > 0xdfff]
+        , testCase "single utf16 surrogates" $
+          traverse_ (valCodepoint False) [0xd800 .. 0xdfff]
+        , testCase "paired utf16 surrogates" $
+          traverse_
+            (valCodepoints False)
+            (do x <- [0xd800 .. 0xdbff]
+                y <- [0xdc00 .. 0xdfff]
+                [[x, y], [y, x]])
+        ]
     ]
   where
-    gentest (s, d) = testCaseSteps s . fmap snd $ foldl' indtest init d
+    gentest (s, d) = testCaseSteps s . fmap snd $ foldl' indtest init' d
     indtest x (e, d) step =
       let (i, act) = x step
       in ( i + 1
-         , do act
-              step ("sequence " ++ show i)
+         , do _ <- act
+              _ <- step ("sequence " ++ show i)
               validateBS d @=? e)
-    init _ = (1, return ())
+    init' _ = (1 :: Int, return ())
+    fromCodepoint cps = toRep $ fromString (map toEnum cps)
+    valCodepoint eq cp =
+      assertEqual (showHex cp "") eq (validateBS $ fromCodepoint [cp])
+    valCodepoints eq cps =
+      assertEqual
+        (show $ map (flip showHex "") cps)
+        eq
+        (validateBS $ fromCodepoint cps)
 
 -- Create test sequences for UTF-8 decoder tests from
 -- http://www.cl.cam.ac.uk/~mgk25/ucs/examples/UTF-8-test.txt
