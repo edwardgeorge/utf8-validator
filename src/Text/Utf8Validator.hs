@@ -15,7 +15,6 @@ module Text.Utf8Validator
   ) where
 import           Data.Bits
 import qualified Data.ByteString as BS
-import qualified Data.Vector.Unboxed as V
 import           Data.Word
 
 data CharClass
