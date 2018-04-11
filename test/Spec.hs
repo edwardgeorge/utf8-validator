@@ -85,7 +85,6 @@ utf8TestSequences =
       , (True, "hello\xF0\xA4\xAD\xA2world")
       , (True, "\xce\xba\xe1\xbd\xb9\xcf\x83\xce\xbc\xce\xb5")
       ])
-  -- missing: All prefixes of correct UTF-8 text
   , ( "First possible sequence of a certain length"
     , [ (True, "\x00")
       , (True, "\xc2\x80")
@@ -140,6 +139,11 @@ utf8TestSequences =
       , (False, "\xfd\xbf\xbf\xbf\xbf")
       ])
   -- missing: Concatenation of incomplete sequences
+  , ( "Concatenation of incomplete sequences"
+    , [ ( False
+        , "\xc0\xe0\x80\xf0\x80\x80\xf8\x80\x80\x80\xfc\x80\x80\x80" `mappend`
+          "\x80\xdf\xef\xbf\xf7\xbf\xbf\xfb\xbf\xbf\xbf\xfd\xbf\xbf\xbf\xbf")
+      ])
   , ( "Impossible bytes"
     , [(False, "\xfe"), (False, "\xff"), (False, "\xfe\xfe\xff\xff")])
   , ( "Examples of an overlong ASCII character"
